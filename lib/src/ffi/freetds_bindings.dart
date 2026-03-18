@@ -634,7 +634,12 @@ class _DbLibErrorStore {
 
   static void setLastMessage(Pointer<DBPROCESS>? dbproc, String msg) {
     final k = dbproc == null || dbproc == nullptr ? 0 : dbproc.address;
-    _lastMessage[k] = msg;
+    var existing = _lastMessage[k];
+    if (existing != null && existing.isNotEmpty) {
+      _lastMessage[k] = '$existing\n$msg';
+    } else {
+      _lastMessage[k] = msg;
+    }
   }
 }
 

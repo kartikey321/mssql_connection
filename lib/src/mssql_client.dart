@@ -759,8 +759,8 @@ class MssqlClient {
 
   static String _inferSqlType(dynamic v) {
     // For NULL values, avoid sql_variant which cannot implicitly convert to many types.
-    // Use NVARCHAR(MAX) so NULL can bind safely to any nullable target type.
-    if (v == null) return 'nvarchar(max)';
+    // Use varchar(max) so NULL can bind safely to any nullable target type.
+    if (v == null) return 'varchar(max)';
     if (v is bool) return 'bit';
     if (v is int) {
       // choose bigint if outside 32-bit range
@@ -768,13 +768,13 @@ class MssqlClient {
       return 'int';
     }
     if (v is double) return 'float';
-    if (v is String) return 'nvarchar(max)';
+    if (v is String) return 'varchar(max)';
     // Declare DateTime parameters as NVARCHAR and let SQL convert explicitly
     // (e.g., CONVERT(datetime2, @when)). This avoids binary TDS packing.
     if (v is DateTime) return 'nvarchar(50)';
     if (v is Uint8List) return 'varbinary(max)';
-    // Fallback to NVARCHAR
-    return 'nvarchar(max)';
+    // Fallback to varchar(max)
+    return 'varchar(max)';
   }
 
   // Analyze whether strict SET options are needed and generate the SET batch.
@@ -907,7 +907,7 @@ _RpcVal _encodeForRpc(dynamic v) {
     // Represent NULL by zero-length buffer of any type; server will see NULL
     // when dbrpcparam datalen is 0.
     final p = malloc<Uint8>(0);
-    return _RpcVal(SYBNVARCHAR, _TempBuf(p, 0));
+    return _RpcVal(SYBVARCHAR, _TempBuf(p, 0));
   }
   if (v is bool) {
     final p = malloc<Uint8>();
@@ -966,30 +966,11 @@ class _StringDbBuf {
   _StringDbBuf(this.type, this.buf);
 }
 
-// Encode a Dart string as either UTF-8 (VARCHAR) if ASCII-only, or UTF-16LE (NVARCHAR) if it contains non-ASCII.
+// Encode a Dart string as UTF-8 (VARCHAR).
+// Azure SQL Edge drops the connection if SYBNVARCHAR is used via sp_executesql RPC.
 _StringDbBuf _encodeStringSmart(String s) {
-  bool ascii = true;
-  final units = s.codeUnits;
-  for (final cu in units) {
-    if (cu > 0x7F) {
-      ascii = false;
-      break;
-    }
-  }
-  if (ascii) {
-    final bytes = utf8.encode(s);
-    final p = malloc<Uint8>(bytes.length);
-    p.asTypedList(bytes.length).setAll(0, bytes);
-    return _StringDbBuf(SYBVARCHAR, _TempBuf(p, bytes.length));
-  }
-  // UTF-16LE encode
-  final len = units.length * 2;
-  final p = malloc<Uint8>(len);
-  final view = p.asTypedList(len);
-  for (int i = 0, j = 0; i < units.length; i++, j += 2) {
-    final cu = units[i];
-    view[j] = cu & 0xFF;
-    view[j + 1] = (cu >> 8) & 0xFF;
-  }
-  return _StringDbBuf(SYBNVARCHAR, _TempBuf(p, len));
+  final bytes = utf8.encode(s);
+  final p = malloc<Uint8>(bytes.length);
+  p.asTypedList(bytes.length).setAll(0, bytes);
+  return _StringDbBuf(SYBVARCHAR, _TempBuf(p, bytes.length));
 }
